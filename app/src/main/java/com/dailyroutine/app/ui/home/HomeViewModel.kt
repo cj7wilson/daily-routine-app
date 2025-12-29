@@ -17,42 +17,64 @@ class HomeViewModel(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     val isPremium: StateFlow<Boolean> = billingManager.isPremium
+    
+    private val _refreshTrigger = MutableStateFlow(0)
 
     init {
         loadRoutines()
+        
+        // Also observe refresh trigger
+        viewModelScope.launch {
+            _refreshTrigger.collect {
+                loadRoutinesSnapshot()
+            }
+        }
     }
 
     private fun loadRoutines() {
         viewModelScope.launch {
-            repository.getAllRoutines()
-                .catch { e ->
-                    _uiState.value = HomeUiState.Error(e.message ?: "Unknown error")
-                }
-                .collect { routines ->
-                    _uiState.value = if (routines.isEmpty()) {
-                        HomeUiState.Empty
-                    } else {
-                        HomeUiState.Success(routines)
-                    }
-                }
+            loadRoutinesSnapshot()
+        }
+    }
+    
+    private suspend fun loadRoutinesSnapshot() {
+        try {
+            val routines = repository.getAllRoutinesSnapshot()
+            _uiState.value = if (routines.isEmpty()) {
+                HomeUiState.Empty
+            } else {
+                HomeUiState.Success(routines)
+            }
+        } catch (e: Exception) {
+            _uiState.value = HomeUiState.Error(e.message ?: "Unknown error")
         }
     }
 
     fun toggleItemCompletion(itemId: Long) {
         viewModelScope.launch {
             repository.toggleItemCompletion(itemId)
+            // Refresh the list
+            _refreshTrigger.value++
         }
     }
 
     fun deleteRoutine(routineId: Long) {
         viewModelScope.launch {
             repository.deleteRoutine(routineId)
+            // Refresh the list
+            _refreshTrigger.value++
         }
     }
 
     suspend fun canCreateMoreRoutines(): Boolean {
         val count = repository.getActiveRoutineCount()
         return billingManager.canCreateMoreRoutines(count)
+    }
+    
+    fun refresh() {
+        viewModelScope.launch {
+            _refreshTrigger.value++
+        }
     }
 }
 

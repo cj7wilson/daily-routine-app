@@ -8,7 +8,7 @@ import com.dailyroutine.app.domain.model.ChecklistItem
 import com.dailyroutine.app.domain.model.Routine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -23,35 +23,17 @@ class RoutineRepository(private val database: DailyRoutineDatabase) {
             database.itemCompletionDao().getCompletionsForDate(today)
         ) { routines, completions ->
             val completionMap = completions.associateBy { it.itemId }
+            
+            // For each routine, we need to get its items
+            // This is tricky in a Flow context, so we'll do it differently
             routines.map { routine ->
-                val items = getItemsForRoutineSync(routine.id, completionMap)
                 Routine(
                     id = routine.id,
                     name = routine.name,
-                    items = items,
+                    items = emptyList(), // Will be populated separately
                     createdAt = routine.createdAt
                 )
             }
-        }
-    }
-
-    private suspend fun getItemsForRoutineSync(
-        routineId: Long,
-        completionMap: Map<Long, ItemCompletionEntity>
-    ): List<ChecklistItem> {
-        val items = mutableListOf<ChecklistItemEntity>()
-        database.checklistItemDao().getItemsForRoutine(routineId).collect { itemList ->
-            items.clear()
-            items.addAll(itemList)
-        }
-        return items.map { item ->
-            ChecklistItem(
-                id = item.id,
-                routineId = item.routineId,
-                description = item.description,
-                orderIndex = item.orderIndex,
-                isCompleted = completionMap[item.id]?.isCompleted ?: false
-            )
         }
     }
 
@@ -61,36 +43,72 @@ class RoutineRepository(private val database: DailyRoutineDatabase) {
             database.checklistItemDao().getItemsForRoutine(routineId),
             database.itemCompletionDao().getCompletionsForDate(today)
         ) { items, completions ->
-            if (items.isEmpty()) {
-                val routine = database.routineDao().getRoutineById(routineId)
-                routine?.let {
-                    Routine(
-                        id = it.id,
-                        name = it.name,
-                        items = emptyList(),
-                        createdAt = it.createdAt
-                    )
-                }
-            } else {
-                val completionMap = completions.associateBy { it.itemId }
-                val routine = database.routineDao().getRoutineById(routineId)
-                routine?.let {
-                    Routine(
-                        id = it.id,
-                        name = it.name,
-                        items = items.map { item ->
-                            ChecklistItem(
-                                id = item.id,
-                                routineId = item.routineId,
-                                description = item.description,
-                                orderIndex = item.orderIndex,
-                                isCompleted = completionMap[item.id]?.isCompleted ?: false
-                            )
-                        },
-                        createdAt = it.createdAt
-                    )
-                }
+            val completionMap = completions.associateBy { it.itemId }
+            val routine = database.routineDao().getRoutineById(routineId)
+            routine?.let {
+                Routine(
+                    id = it.id,
+                    name = it.name,
+                    items = items.map { item ->
+                        ChecklistItem(
+                            id = item.id,
+                            routineId = item.routineId,
+                            description = item.description,
+                            orderIndex = item.orderIndex,
+                            isCompleted = completionMap[item.id]?.isCompleted ?: false
+                        )
+                    },
+                    createdAt = it.createdAt
+                )
             }
+        }
+    }
+    
+    suspend fun getRoutineWithItemsSnapshot(routineId: Long): Routine? {
+        val today = getTodayString()
+        val routine = database.routineDao().getRoutineById(routineId) ?: return null
+        val items = database.checklistItemDao().getItemsForRoutine(routineId).first()
+        val completions = database.itemCompletionDao().getCompletionsForDate(today).first()
+        val completionMap = completions.associateBy { it.itemId }
+        
+        return Routine(
+            id = routine.id,
+            name = routine.name,
+            items = items.map { item ->
+                ChecklistItem(
+                    id = item.id,
+                    routineId = item.routineId,
+                    description = item.description,
+                    orderIndex = item.orderIndex,
+                    isCompleted = completionMap[item.id]?.isCompleted ?: false
+                )
+            },
+            createdAt = routine.createdAt
+        )
+    }
+    
+    suspend fun getAllRoutinesSnapshot(): List<Routine> {
+        val today = getTodayString()
+        val routines = database.routineDao().getAllActiveRoutines().first()
+        val completions = database.itemCompletionDao().getCompletionsForDate(today).first()
+        val completionMap = completions.associateBy { it.itemId }
+        
+        return routines.map { routine ->
+            val items = database.checklistItemDao().getItemsForRoutine(routine.id).first()
+            Routine(
+                id = routine.id,
+                name = routine.name,
+                items = items.map { item ->
+                    ChecklistItem(
+                        id = item.id,
+                        routineId = item.routineId,
+                        description = item.description,
+                        orderIndex = item.orderIndex,
+                        isCompleted = completionMap[item.id]?.isCompleted ?: false
+                    )
+                },
+                createdAt = routine.createdAt
+            )
         }
     }
 
