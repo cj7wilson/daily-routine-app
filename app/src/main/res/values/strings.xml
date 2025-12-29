@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Daily Routine</string>
+    <string name="today">Today</string>
+    <string name="routines">Routines</string>
+    <string name="add_routine">Add Routine</string>
+    <string name="add_item">Add Item</string>
+    <string name="routine_name">Routine Name</string>
+    <string name="item_description">Item Description</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="no_routines">No routines yet. Tap + to add one.</string>
+    <string name="no_items">No items in this routine. Add some!</string>
+    <string name="completed">Completed</string>
+    <string name="incomplete">Incomplete</string>
+    <string name="premium_feature">Premium Feature</string>
+    <string name="upgrade_to_premium">Upgrade to Premium</string>
+    <string name="free_routine_limit">Free version limited to %d routines</string>
+</resources>
